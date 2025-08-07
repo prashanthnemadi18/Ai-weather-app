@@ -51,13 +51,13 @@ To run the project locally:
 - No installation required — simply open `index.html`
 
 ---
-
 ## 🙌 Author
 
 **Prashanth Nemadi**  
 [LinkedIn Profile](https://www.linkedin.com/in/prashanthnemadi)  
 [GitHub Profile](https://github.com/Prashanthnemadi)  
-📩 Email: yourmail@example.com *(replace with yours)*
+📩 Email: prashanthnemadi@gmail.com
+
 
 ---
 
