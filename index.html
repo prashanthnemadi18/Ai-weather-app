@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Weather App</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="card">
+    <div class="search">
+      <input type="text" id="cityInput" placeholder="Enter city name" spellcheck="false" />
+      <button id="searchBtn"><img src="weather-app-img/images/search.png" alt="Search" /></button>
+      <button id="voiceBtn"><img src="weather-app-img/images/mic.png" alt="Mic" /></button>
+    </div>
+
+    <div class="weather">
+      <img src="" class="weather-icon" alt="Weather Icon" />
+      <h1 class="temp">--°C</h1>
+      <h2 class="city">Loading...</h2>
+      <div class="details">
+        <div class="col"><strong>Humidity:</strong> <p class="humidity">--%</p></div>
+        <div class="col"><strong>Wind Speed:</strong> <p class="wind">-- km/h</p></div>
+        <div class="col"><strong>Wind Direction:</strong> <p class="wind-dir">--</p></div>
+        <div class="col"><strong>Pressure:</strong> <p class="pressure">-- hPa</p></div>
+        <div class="col"><strong>Visibility:</strong> <p class="visibility">-- km</p></div>
+        <div class="col"><strong>UV Index:</strong> <p class="uv">--</p></div>
+        <div class="col"><strong>Precipitation:</strong> <p class="precip">-- mm</p></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const apiKey = "de16551a16c315e0ac1436429d21877e";
+  const searchBox = document.getElementById("cityInput");
+  const searchBtn = document.getElementById("searchBtn");
+  const voiceBtn = document.getElementById("voiceBtn");
+
+  async function checkWeather(city) {
+    const apiUrl = `https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=${apiKey}`;
+    const response = await fetch(apiUrl);
+
+    if (response.status === 404) {
+      alert("Error: city not found");
+      return;
+    }
+
+    const data = await response.json();
+    updateWeather(data);
+  }
+
+  function updateWeather(data) {
+    document.querySelector(".temp").innerHTML = Math.round(data.main.temp) + "°C";
+    document.querySelector(".city").innerHTML = data.name;
+    document.querySelector(".humidity").innerHTML = data.main.humidity + "%";
+    document.querySelector(".wind").innerHTML = data.wind.speed + " km/h";
+    document.querySelector(".wind-dir").innerHTML = getWindDirection(data.wind.deg);
+    document.querySelector(".pressure").innerHTML = data.main.pressure + " hPa";
+    document.querySelector(".visibility").innerHTML = (data.visibility / 1000).toFixed(1) + " km";
+    document.querySelector(".precip").innerHTML = (data.rain?.['1h'] || 0) + " mm";
+
+    // Fetch UV index separately using lat/lon
+    fetch(`https://api.openweathermap.org/data/2.5/uvi?appid=${apiKey}&lat=${data.coord.lat}&lon=${data.coord.lon}`)
+      .then(res => res.json())
+      .then(uviData => {
+        document.querySelector(".uv").innerHTML = uviData.value;
+      })
+      .catch(() => {
+        document.querySelector(".uv").innerHTML = "--";
+      });
+
+    const iconCode = data.weather[0].icon;
+    document.querySelector(".weather-icon").src = `https://openweathermap.org/img/wn/${iconCode}@2x.png`;
+  }
+
+  function getWindDirection(deg) {
+    const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+    return directions[Math.round(deg / 45) % 8];
+  }
+
+  searchBtn.addEventListener("click", () => {
+    const city = searchBox.value.trim();
+    if (city !== "") {
+      checkWeather(city);
+    }
+  });
+
+  if ("webkitSpeechRecognition" in window) {
+    const recognition = new webkitSpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+
+    voiceBtn.addEventListener("click", () => {
+      recognition.start();
+    });
+
+    recognition.onresult = function (event) {
+      let transcript = event.results[0][0].transcript.trim().toLowerCase();
+      transcript = transcript.replace(/[.]/g, "");
+
+      const countryToCity = {
+        "england": "London",
+        "india": "Delhi",
+        "america": "New York",
+        "united states": "New York",
+        "france": "Paris",
+        "germany": "Berlin",
+        "australia": "Sydney",
+        "japan": "Tokyo"
+      };
+
+      if (countryToCity[transcript]) {
+        transcript = countryToCity[transcript];
+      }
+
+      searchBox.value = transcript;
+      checkWeather(transcript);
+    };
+  }
+
+  window.onload = function () {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(async function (position) {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        const apiUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`;
+        const response = await fetch(apiUrl);
+        const data = await response.json();
+        updateWeather(data);
+      });
+    }
+  };
+</script>
+</body>
+</html>
