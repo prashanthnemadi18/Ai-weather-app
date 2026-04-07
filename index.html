@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Weather App</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+</head>
+<body>
+  <!-- Animated Background Particles -->
+  <div class="particles-container" id="particles"></div>
+  
+  <!-- Main Container -->
+  <div class="app-container">
+    <!-- Left Panel - Weather Info -->
+    <div class="card weather-card">
+      <!-- Search Section -->
+      <div class="search">
+        <div class="search-input-wrapper">
+          <i class="fas fa-search search-icon"></i>
+          <input type="text" id="cityInput" placeholder="Search for a city..." spellcheck="false" autocomplete="off" />
+          <div class="suggestions" id="suggestions"></div>
+        </div>
+        <button id="voiceBtn" class="icon-btn" title="Voice Search">
+          <i class="fas fa-microphone"></i>
+        </button>
+        <button id="locationBtn" class="icon-btn" title="Use My Location">
+          <i class="fas fa-location-crosshairs"></i>
+        </button>
+      </div>
+
+      <!-- Current Weather -->
+      <div class="weather">
+        <div class="weather-main">
+          <div class="weather-icon-container">
+            <img src="" class="weather-icon" alt="Weather Icon" />
+            <div class="weather-particles"></div>
+          </div>
+          <div class="weather-info">
+            <h1 class="temp">--°C</h1>
+            <p class="feels-like">Feels like --°C</p>
+            <h2 class="city">Loading...</h2>
+            <p class="weather-desc">--</p>
+            <p class="date-time" id="dateTime"></p>
+          </div>
+        </div>
+
+        <!-- AI Weather Insight -->
+        <div class="ai-insight">
+          <div class="ai-header">
+            <i class="fas fa-brain"></i>
+            <span>AI Weather Insight</span>
+          </div>
+          <p id="aiInsight">Analyzing weather conditions...</p>
+        </div>
+
+        <!-- Weather Details Grid -->
+        <div class="details">
+          <div class="col">
+            <i class="fas fa-droplet"></i>
+            <div class="col-content">
+              <strong>Humidity</strong>
+              <p class="humidity">--%</p>
+            </div>
+          </div>
+          <div class="col">
+            <i class="fas fa-wind"></i>
+            <div class="col-content">
+              <strong>Wind Speed</strong>
+              <p class="wind">-- km/h</p>
+            </div>
+          </div>
+          <div class="col">
+            <i class="fas fa-compass"></i>
+            <div class="col-content">
+              <strong>Wind Direction</strong>
+              <p class="wind-dir">--</p>
+            </div>
+          </div>
+          <div class="col">
+            <i class="fas fa-gauge-high"></i>
+            <div class="col-content">
+              <strong>Pressure</strong>
+              <p class="pressure">-- hPa</p>
+            </div>
+          </div>
+          <div class="col">
+            <i class="fas fa-eye"></i>
+            <div class="col-content">
+              <strong>Visibility</strong>
+              <p class="visibility">-- km</p>
+            </div>
+          </div>
+          <div class="col">
+            <i class="fas fa-sun"></i>
+            <div class="col-content">
+              <strong>UV Index</strong>
+              <p class="uv">--</p>
+            </div>
+          </div>
+          <div class="col">
+            <i class="fas fa-cloud-rain"></i>
+            <div class="col-content">
+              <strong>Precipitation</strong>
+              <p class="precip">-- mm</p>
+            </div>
+          </div>
+          <div class="col">
+            <i class="fas fa-temperature-half"></i>
+            <div class="col-content">
+              <strong>Min/Max</strong>
+              <p class="min-max">--°C / --°C</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel - Interactive Map -->
+    <div class="card map-card">
+      <div class="map-header">
+        <h3><i class="fas fa-map-marked-alt"></i> Weather Map</h3>
+        <div class="map-controls">
+          <button class="map-layer-btn active" data-layer="temp" title="Temperature">
+            <i class="fas fa-temperature-high"></i>
+          </button>
+          <button class="map-layer-btn" data-layer="clouds" title="Clouds">
+            <i class="fas fa-cloud"></i>
+          </button>
+          <button class="map-layer-btn" data-layer="precipitation" title="Precipitation">
+            <i class="fas fa-cloud-rain"></i>
+          </button>
+          <button class="map-layer-btn" data-layer="wind" title="Wind">
+            <i class="fas fa-wind"></i>
+          </button>
+        </div>
+      </div>
+      <div id="map"></div>
+      <div class="map-legend">
+        <span>Interactive weather map - Click to explore</span>
+      </div>
+    </div>
+  </div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const apiKey = "de16551a16c315e0ac1436429d21877e";
+  const searchBox = document.getElementById("cityInput");
+  const voiceBtn = document.getElementById("voiceBtn");
+  const locationBtn = document.getElementById("locationBtn");
+  const suggestionsBox = document.getElementById("suggestions");
+  
+  let map, weatherLayer, marker;
+  let currentLat, currentLon;
+  let debounceTimer;
+
+  // Initialize Map
+  function initMap(lat = 20, lon = 0, zoom = 2) {
+    if (!map) {
+      map = L.map('map').setView([lat, lon], zoom);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 18
+      }).addTo(map);
+      
+      // Add click event to map
+      map.on('click', async function(e) {
+        const { lat, lng } = e.latlng;
+        await checkWeatherByCoords(lat, lng);
+      });
+    }
+    
+    updateWeatherLayer('temp');
+  }
+
+  // Update weather layer on map
+  function updateWeatherLayer(layer) {
+    if (weatherLayer) {
+      map.removeLayer(weatherLayer);
+    }
+    
+    const layers = {
+      temp: 'temp_new',
+      clouds: 'clouds_new',
+      precipitation: 'precipitation_new',
+      wind: 'wind_new'
+    };
+    
+    weatherLayer = L.tileLayer(
+      `https://tile.openweathermap.org/map/${layers[layer]}/{z}/{x}/{y}.png?appid=${apiKey}`,
+      { opacity: 0.6, attribution: 'OpenWeatherMap' }
+    );
+    weatherLayer.addTo(map);
+  }
+
+  // Map layer controls
+  document.querySelectorAll('.map-layer-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.map-layer-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      updateWeatherLayer(this.dataset.layer);
+    });
+  });
+
+  // Create animated particles
+  function createParticles() {
+    const container = document.getElementById('particles');
+    const colors = [
+      'rgba(255, 107, 107, 0.8)',  // Red
+      'rgba(78, 205, 196, 0.8)',   // Teal
+      'rgba(69, 183, 209, 0.8)',   // Blue
+      'rgba(249, 202, 36, 0.8)',   // Yellow
+      'rgba(108, 92, 231, 0.8)',   // Purple
+      'rgba(253, 121, 168, 0.8)',  // Pink
+      'rgba(0, 184, 148, 0.8)',    // Green
+      'rgba(253, 203, 110, 0.8)'   // Orange
+    ];
+    
+    for (let i = 0; i < 80; i++) {
+      const particle = document.createElement('div');
+      particle.className = 'particle';
+      particle.style.left = Math.random() * 100 + '%';
+      particle.style.setProperty('--color-1', colors[0]);
+      particle.style.setProperty('--color-2', colors[1]);
+      particle.style.setProperty('--color-3', colors[2]);
+      particle.style.setProperty('--color-4', colors[3]);
+      particle.style.setProperty('--color-5', colors[4]);
+      particle.style.setProperty('--color-6', colors[5]);
+      particle.style.animationDelay = Math.random() * 20 + 's';
+      particle.style.animationDuration = (Math.random() * 15 + 10) + 's';
+      container.appendChild(particle);
+    }
+  }
+
+  // Update date and time
+  function updateDateTime() {
+    const now = new Date();
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    document.getElementById('dateTime').textContent = now.toLocaleDateString('en-US', options);
+  }
+
+  // AI Weather Insight Generator
+  function generateAIInsight(data) {
+    const temp = data.main.temp;
+    const humidity = data.main.humidity;
+    const windSpeed = data.wind.speed;
+    const weather = data.weather[0].main.toLowerCase();
+    
+    let insight = "";
+    
+    if (temp > 30) {
+      insight = "🔥 It's quite hot! Stay hydrated and avoid prolonged sun exposure.";
+    } else if (temp > 20) {
+      insight = "☀️ Perfect weather for outdoor activities! Enjoy your day.";
+    } else if (temp > 10) {
+      insight = "🧥 Mild temperature. A light jacket might be comfortable.";
+    } else if (temp > 0) {
+      insight = "❄️ It's cold outside. Dress warmly and stay cozy!";
+    } else {
+      insight = "🥶 Freezing temperatures! Bundle up and stay safe.";
+    }
+    
+    if (weather.includes('rain')) {
+      insight += " Don't forget your umbrella! ☔";
+    } else if (weather.includes('snow')) {
+      insight += " Snow expected - drive carefully! ⛄";
+    } else if (humidity > 80) {
+      insight += " High humidity may make it feel warmer.";
+    }
+    
+    if (windSpeed > 20) {
+      insight += " Strong winds - secure loose objects! 💨";
+    }
+    
+    return insight;
+  }
+
+  // City suggestions
+  const popularCities = [
+    'London', 'New York', 'Tokyo', 'Paris', 'Dubai', 'Singapore', 
+    'Mumbai', 'Sydney', 'Berlin', 'Toronto', 'Los Angeles', 'Chicago',
+    'Hong Kong', 'Barcelona', 'Amsterdam', 'Rome', 'Madrid', 'Seoul'
+  ];
+
+  searchBox.addEventListener('input', function() {
+    clearTimeout(debounceTimer);
+    const query = this.value.trim().toLowerCase();
+    
+    if (query.length < 2) {
+      suggestionsBox.innerHTML = '';
+      suggestionsBox.classList.remove('active');
+      return;
+    }
+    
+    debounceTimer = setTimeout(() => {
+      const matches = popularCities.filter(city => 
+        city.toLowerCase().includes(query)
+      ).slice(0, 5);
+      
+      if (matches.length > 0) {
+        suggestionsBox.innerHTML = matches.map(city => 
+          `<div class="suggestion-item" data-city="${city}">
+            <i class="fas fa-location-dot"></i> ${city}
+          </div>`
+        ).join('');
+        suggestionsBox.classList.add('active');
+      } else {
+        suggestionsBox.classList.remove('active');
+      }
+    }, 300);
+  });
+
+  suggestionsBox.addEventListener('click', function(e) {
+    const item = e.target.closest('.suggestion-item');
+    if (item) {
+      const city = item.dataset.city;
+      searchBox.value = city;
+      suggestionsBox.classList.remove('active');
+      checkWeather(city);
+    }
+  });
+
+  searchBox.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      const city = this.value.trim();
+      if (city) {
+        suggestionsBox.classList.remove('active');
+        checkWeather(city);
+      }
+    }
+  });
+
+  // Check weather by city name
+  async function checkWeather(city) {
+    try {
+      const apiUrl = `https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=${apiKey}`;
+      const response = await fetch(apiUrl);
+
+      if (response.status === 404) {
+        showNotification('City not found! Please try again.', 'error');
+        return;
+      }
+
+      const data = await response.json();
+      updateWeather(data);
+      updateMap(data.coord.lat, data.coord.lon);
+    } catch (error) {
+      showNotification('Error fetching weather data', 'error');
+    }
+  }
+
+  // Check weather by coordinates
+  async function checkWeatherByCoords(lat, lon) {
+    try {
+      const apiUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`;
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      updateWeather(data);
+      updateMap(lat, lon);
+    } catch (error) {
+      showNotification('Error fetching weather data', 'error');
+    }
+  }
+
+  // Update weather display
+  function updateWeather(data) {
+    currentLat = data.coord.lat;
+    currentLon = data.coord.lon;
+    
+    // Animate temperature change
+    animateValue('.temp', 0, Math.round(data.main.temp), 1000, '°C');
+    
+    document.querySelector(".feels-like").innerHTML = `Feels like ${Math.round(data.main.feels_like)}°C`;
+    document.querySelector(".city").innerHTML = `${data.name}, ${data.sys.country}`;
+    document.querySelector(".weather-desc").innerHTML = data.weather[0].description;
+    document.querySelector(".humidity").innerHTML = data.main.humidity + "%";
+    document.querySelector(".wind").innerHTML = data.wind.speed + " km/h";
+    document.querySelector(".wind-dir").innerHTML = getWindDirection(data.wind.deg);
+    document.querySelector(".pressure").innerHTML = data.main.pressure + " hPa";
+    document.querySelector(".visibility").innerHTML = (data.visibility / 1000).toFixed(1) + " km";
+    document.querySelector(".precip").innerHTML = (data.rain?.['1h'] || data.snow?.['1h'] || 0) + " mm";
+    document.querySelector(".min-max").innerHTML = `${Math.round(data.main.temp_min)}°C / ${Math.round(data.main.temp_max)}°C`;
+
+    // Update weather icon
+    const iconCode = data.weather[0].icon;
+    document.querySelector(".weather-icon").src = `https://openweathermap.org/img/wn/${iconCode}@4x.png`;
+
+    // Generate AI insight
+    document.getElementById('aiInsight').innerHTML = generateAIInsight(data);
+
+    // Fetch UV index
+    fetch(`https://api.openweathermap.org/data/2.5/uvi?appid=${apiKey}&lat=${data.coord.lat}&lon=${data.coord.lon}`)
+      .then(res => res.json())
+      .then(uviData => {
+        const uvValue = uviData.value || 0;
+        document.querySelector(".uv").innerHTML = uvValue;
+        document.querySelector(".uv").style.color = getUVColor(uvValue);
+      })
+      .catch(() => {
+        document.querySelector(".uv").innerHTML = "--";
+      });
+
+    // Update background based on weather
+    updateBackground(data.weather[0].main.toLowerCase());
+  }
+
+  // Animate number values
+  function animateValue(selector, start, end, duration, suffix = '') {
+    const element = document.querySelector(selector);
+    const range = end - start;
+    const increment = range / (duration / 16);
+    let current = start;
+    
+    const timer = setInterval(() => {
+      current += increment;
+      if ((increment > 0 && current >= end) || (increment < 0 && current <= end)) {
+        current = end;
+        clearInterval(timer);
+      }
+      element.textContent = Math.round(current) + suffix;
+    }, 16);
+  }
+
+  // Update map position and marker
+  function updateMap(lat, lon) {
+    if (map) {
+      map.setView([lat, lon], 10);
+      
+      if (marker) {
+        map.removeLayer(marker);
+      }
+      
+      marker = L.marker([lat, lon]).addTo(map)
+        .bindPopup('Current Location')
+        .openPopup();
+    }
+  }
+
+  // Get wind direction
+  function getWindDirection(deg) {
+    const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+    return directions[Math.round(deg / 45) % 8];
+  }
+
+  // Get UV color
+  function getUVColor(uv) {
+    if (uv <= 2) return '#4ade80';
+    if (uv <= 5) return '#fbbf24';
+    if (uv <= 7) return '#fb923c';
+    if (uv <= 10) return '#f87171';
+    return '#dc2626';
+  }
+
+  // Update background gradient based on weather
+  function updateBackground(weather) {
+    const body = document.body;
+    const gradients = {
+      clear: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      clouds: 'linear-gradient(135deg, #757F9A 0%, #D7DDE8 100%)',
+      rain: 'linear-gradient(135deg, #4b6cb7 0%, #182848 100%)',
+      drizzle: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)',
+      thunderstorm: 'linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%)',
+      snow: 'linear-gradient(135deg, #e6dada 0%, #274046 100%)',
+      mist: 'linear-gradient(135deg, #bdc3c7 0%, #2c3e50 100%)',
+      fog: 'linear-gradient(135deg, #bdc3c7 0%, #2c3e50 100%)',
+      default: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+    };
+    
+    body.style.background = gradients[weather] || gradients.default;
+  }
+
+  // Show notification
+  function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => notification.classList.add('show'), 100);
+    setTimeout(() => {
+      notification.classList.remove('show');
+      setTimeout(() => notification.remove(), 300);
+    }, 3000);
+  }
+
+  // Voice recognition
+  if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+
+    voiceBtn.addEventListener("click", () => {
+      recognition.start();
+      voiceBtn.classList.add('active');
+    });
+
+    recognition.onresult = function (event) {
+      let transcript = event.results[0][0].transcript.trim().toLowerCase();
+      transcript = transcript.replace(/[.]/g, "");
+
+      const countryToCity = {
+        "england": "London", "india": "Delhi", "america": "New York",
+        "united states": "New York", "france": "Paris", "germany": "Berlin",
+        "australia": "Sydney", "japan": "Tokyo", "china": "Beijing"
+      };
+
+      if (countryToCity[transcript]) {
+        transcript = countryToCity[transcript];
+      }
+
+      searchBox.value = transcript;
+      checkWeather(transcript);
+      voiceBtn.classList.remove('active');
+    };
+
+    recognition.onerror = function() {
+      voiceBtn.classList.remove('active');
+      showNotification('Voice recognition failed', 'error');
+    };
+  } else {
+    voiceBtn.style.display = 'none';
+  }
+
+  // Location button
+  locationBtn.addEventListener('click', () => {
+    if (navigator.geolocation) {
+      locationBtn.classList.add('loading');
+      navigator.geolocation.getCurrentPosition(
+        async function (position) {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          await checkWeatherByCoords(lat, lon);
+          locationBtn.classList.remove('loading');
+        },
+        function() {
+          showNotification('Unable to get your location', 'error');
+          locationBtn.classList.remove('loading');
+        }
+      );
+    } else {
+      showNotification('Geolocation is not supported', 'error');
+    }
+  });
+
+  // Initialize app
+  window.onload = function () {
+    createParticles();
+    initMap();
+    updateDateTime();
+    setInterval(updateDateTime, 60000);
+    
+    // Get user location on load
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async function (position) {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          await checkWeatherByCoords(lat, lon);
+        },
+        function() {
+          // Default to a major city if location access denied
+          checkWeather('London');
+        }
+      );
+    } else {
+      checkWeather('London');
+    }
+  };
+
+  // Close suggestions when clicking outside
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.search-input-wrapper')) {
+      suggestionsBox.classList.remove('active');
+    }
+  });
+</script>
+</body>
+</html>
